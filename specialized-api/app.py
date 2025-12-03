@@ -1,356 +1,479 @@
+"""
+API GROUPE SPÉCIALISÉ - Port 5004
+Gère 4 systèmes: immune, musculoskeletal, hematological, reproductive
+Compatible avec orchestration-api et tests individuels
+"""
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import random
 from datetime import datetime
-import logging
-import sys
-
-# Configuration du logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+import random
 
 app = Flask(__name__)
-CORS(app)  # Active CORS pour permettre les requêtes depuis d'autres origines
+CORS(app)
 
-class ImmuneSystemSimulator:
-    """Simulateur du système immunitaire"""
+# ===================== CONFIGURATION DES SYSTÈMES =======================
+
+SYSTEMS = {
+    "immune": {
+        "name": "Système Immunitaire",
+        "icon": "🛡️",
+        "metrics": ["white_blood_cells", "antibody_level", "lymphocyte_count", "body_temperature"],
+        "conditions": ["infection", "autoimmune", "immunodeficiency", "allergy", "normal"],
+        "parameters": {
+            "sensitivity": 75,
+            "response_time": 2.5,
+            "memory_cells": 85
+        }
+    },
+    "musculoskeletal": {
+        "name": "Système Musculosquelettique",
+        "icon": "💪",
+        "metrics": ["bone_density", "muscle_mass", "joint_flexibility", "strength_index"],
+        "conditions": ["arthritis", "osteoporosis", "muscle_strain", "fracture", "normal"],
+        "parameters": {
+            "bone_remodeling_rate": 70,
+            "muscle_recovery": 80,
+            "joint_lubrication": 85
+        }
+    },
+    "hematological": {
+        "name": "Système Sanguin",
+        "icon": "🩸",
+        "metrics": ["red_blood_cells", "hemoglobin", "platelet_count", "hematocrit"],
+        "conditions": ["anemia", "leukemia", "thrombocytopenia", "polycythemia", "normal"],
+        "parameters": {
+            "coagulation_factor": 90,
+            "oxygen_capacity": 95,
+            "blood_viscosity": 75
+        }
+    },
+    "reproductive": {
+        "name": "Système Reproductif",
+        "icon": "👶",
+        "metrics": ["hormone_levels", "fertility_index", "reproductive_health", "cycle_regularity"],
+        "conditions": ["infertility", "hormonal_imbalance", "dysfunction", "normal"],
+        "parameters": {
+            "hormone_balance": 80,
+            "reproductive_efficiency": 75,
+            "gametogenesis_rate": 70
+        }
+    }
+}
+
+# État actuel de chaque système
+system_states = {sys: "normal" for sys in SYSTEMS.keys()}
+active_conditions = {sys: [] for sys in SYSTEMS.keys()}
+system_parameters = {sys: SYSTEMS[sys]["parameters"].copy() for sys in SYSTEMS.keys()}
+
+# Configuration patient par défaut
+patient_config = {
+    "age": 35,
+    "weight": 70,
+    "height": 175,
+    "gender": "unknown",
+    "medical_history": []
+}
+
+# ===================== FONCTIONS UTILITAIRES =======================
+
+def generate_metrics(system_name, condition="normal"):
+    """Génère des métriques aléatoires selon la condition"""
+    metrics = {}
     
-    def __init__(self):
-        self.age = 30
-        self.sex = "M"
-        self.health_status = "normal"
-        self.active_conditions = []
-        logger.info("Simulateur du système immunitaire initialisé")
+    if system_name == "immune":
+        if condition == "infection":
+            metrics = {
+                "white_blood_cells": random.randint(12000, 20000),
+                "antibody_level": random.randint(80, 100),
+                "lymphocyte_count": random.randint(3000, 5000),
+                "body_temperature": round(random.uniform(38.5, 40.0), 1)
+            }
+        elif condition == "immunodeficiency":
+            metrics = {
+                "white_blood_cells": random.randint(2000, 4000),
+                "antibody_level": random.randint(20, 40),
+                "lymphocyte_count": random.randint(500, 1000),
+                "body_temperature": round(random.uniform(36.0, 37.0), 1)
+            }
+        elif condition == "allergy":
+            metrics = {
+                "white_blood_cells": random.randint(9000, 13000),
+                "antibody_level": random.randint(90, 110),
+                "lymphocyte_count": random.randint(2500, 4000),
+                "body_temperature": round(random.uniform(37.0, 37.5), 1)
+            }
+        else:  # normal
+            metrics = {
+                "white_blood_cells": random.randint(4000, 11000),
+                "antibody_level": random.randint(60, 90),
+                "lymphocyte_count": random.randint(1500, 3000),
+                "body_temperature": round(random.uniform(36.5, 37.2), 1)
+            }
+    
+    elif system_name == "musculoskeletal":
+        if condition == "osteoporosis":
+            metrics = {
+                "bone_density": round(random.uniform(0.5, 0.7), 2),
+                "muscle_mass": round(random.uniform(25, 35), 1),
+                "joint_flexibility": random.randint(40, 60),
+                "strength_index": random.randint(50, 70)
+            }
+        elif condition == "arthritis":
+            metrics = {
+                "bone_density": round(random.uniform(0.8, 1.0), 2),
+                "muscle_mass": round(random.uniform(30, 40), 1),
+                "joint_flexibility": random.randint(20, 40),
+                "strength_index": random.randint(60, 75)
+            }
+        elif condition == "muscle_strain":
+            metrics = {
+                "bone_density": round(random.uniform(0.9, 1.2), 2),
+                "muscle_mass": round(random.uniform(35, 45), 1),
+                "joint_flexibility": random.randint(50, 70),
+                "strength_index": random.randint(40, 60)
+            }
+        else:  # normal
+            metrics = {
+                "bone_density": round(random.uniform(0.9, 1.3), 2),
+                "muscle_mass": round(random.uniform(35, 50), 1),
+                "joint_flexibility": random.randint(70, 90),
+                "strength_index": random.randint(80, 100)
+            }
+    
+    elif system_name == "hematological":
+        if condition == "anemia":
+            metrics = {
+                "red_blood_cells": round(random.uniform(3.0, 4.0), 2),
+                "hemoglobin": round(random.uniform(8.0, 11.0), 1),
+                "platelet_count": random.randint(150000, 250000),
+                "hematocrit": round(random.uniform(30, 36), 1)
+            }
+        elif condition == "thrombocytopenia":
+            metrics = {
+                "red_blood_cells": round(random.uniform(4.5, 5.5), 2),
+                "hemoglobin": round(random.uniform(13.0, 16.0), 1),
+                "platelet_count": random.randint(50000, 100000),
+                "hematocrit": round(random.uniform(40, 45), 1)
+            }
+        elif condition == "polycythemia":
+            metrics = {
+                "red_blood_cells": round(random.uniform(6.0, 7.5), 2),
+                "hemoglobin": round(random.uniform(18.0, 22.0), 1),
+                "platelet_count": random.randint(200000, 450000),
+                "hematocrit": round(random.uniform(52, 62), 1)
+            }
+        else:  # normal
+            metrics = {
+                "red_blood_cells": round(random.uniform(4.5, 5.9), 2),
+                "hemoglobin": round(random.uniform(13.0, 17.0), 1),
+                "platelet_count": random.randint(150000, 400000),
+                "hematocrit": round(random.uniform(40, 50), 1)
+            }
+    
+    elif system_name == "reproductive":
+        if condition == "hormonal_imbalance":
+            metrics = {
+                "hormone_levels": random.randint(30, 50),
+                "fertility_index": round(random.uniform(0.3, 0.6), 2),
+                "reproductive_health": random.randint(40, 60),
+                "cycle_regularity": random.randint(30, 50)
+            }
+        elif condition == "infertility":
+            metrics = {
+                "hormone_levels": random.randint(40, 60),
+                "fertility_index": round(random.uniform(0.1, 0.4), 2),
+                "reproductive_health": random.randint(50, 70),
+                "cycle_regularity": random.randint(40, 60)
+            }
+        else:  # normal
+            metrics = {
+                "hormone_levels": random.randint(70, 100),
+                "fertility_index": round(random.uniform(0.7, 1.0), 2),
+                "reproductive_health": random.randint(80, 95),
+                "cycle_regularity": random.randint(80, 100)
+            }
+    
+    return metrics
+
+def get_health_status(system_name, metrics):
+    """Détermine l'état de santé basé sur les métriques"""
+    if system_name == "immune":
+        wbc = metrics.get("white_blood_cells", 0)
+        temp = metrics.get("body_temperature", 37.0)
+        if wbc > 11000 or temp > 38.0:
+            return "elevated"
+        elif wbc < 4000:
+            return "low"
+        return "normal"
+    
+    elif system_name == "musculoskeletal":
+        bone_density = metrics.get("bone_density", 0)
+        if bone_density < 0.8:
+            return "low_density"
+        return "normal"
+    
+    elif system_name == "hematological":
+        hemoglobin = metrics.get("hemoglobin", 0)
+        if hemoglobin < 12.0:
+            return "anemic"
+        elif hemoglobin > 17.5:
+            return "elevated"
+        return "normal"
+    
+    elif system_name == "reproductive":
+        fertility = metrics.get("fertility_index", 0)
+        if fertility < 0.7:
+            return "impaired"
+        return "normal"
+    
+    return "normal"
+
+# ===================== ENDPOINTS STANDARDS =======================
+
+@app.route('/')
+def home():
+    """Page d'accueil du groupe spécialisé"""
+    return jsonify({
+        "group": "Specialized Systems",
+        "port": 5004,
+        "systems": list(SYSTEMS.keys()),
+        "version": "2.0",
+        "timestamp": datetime.now().isoformat(),
+        "status": "operational",
+        "endpoints": {
+            "status": "/api/<system>/status",
+            "data": "/api/<system>/data",
+            "simulate": "/api/<system>/simulate/<condition>",
+            "parameters": "/api/<system>/parameters",
+            "configure": "/api/<system>/configure"
+        }
+    })
+
+@app.route('/api/<system_name>/status', methods=['GET'])
+def get_status(system_name):
+    """Retourne le statut d'un système"""
+    if system_name not in SYSTEMS:
+        return jsonify({
+            "error": "System not found",
+            "available_systems": list(SYSTEMS.keys())
+        }), 404
+    
+    condition = system_states.get(system_name, "normal")
+    metrics = generate_metrics(system_name, condition)
+    health = get_health_status(system_name, metrics)
+    
+    # Format pour test.py du système immune
+    response = {
+        "system": system_name,
+        "name": SYSTEMS[system_name]["name"],
+        "icon": SYSTEMS[system_name]["icon"],
+        "status": "online",
+        "health_status": health,
+        "state": health,  # Alias pour compatibilité
+        "current_condition": condition,
+        "active_conditions": active_conditions.get(system_name, []),
+        "metrics": metrics,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    # Ajouter des champs spécifiques pour immune
+    if system_name == "immune":
+        response["white_blood_cells"] = metrics.get("white_blood_cells", 0)
+        response["body_temperature"] = metrics.get("body_temperature", 37.0)
+    
+    return jsonify(response)
+
+@app.route('/api/<system_name>/data', methods=['GET'])
+def get_data(system_name):
+    """Retourne les données détaillées d'un système"""
+    if system_name not in SYSTEMS:
+        return jsonify({
+            "error": "System not found"
+        }), 404
+    
+    condition = system_states.get(system_name, "normal")
+    metrics = generate_metrics(system_name, condition)
+    
+    response = {
+        "system": system_name,
+        "name": SYSTEMS[system_name]["name"],
+        "icon": SYSTEMS[system_name]["icon"],
+        "condition": condition,
+        "metrics": metrics,
+        "parameters": system_parameters.get(system_name, {}),
+        "available_conditions": SYSTEMS[system_name]["conditions"],
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    # Format spécial pour immune
+    if system_name == "immune":
+        response["white_blood_cells"] = metrics.get("white_blood_cells", 0)
+        response["body_temperature"] = metrics.get("body_temperature", 37.0)
+    
+    return jsonify(response)
+
+@app.route('/api/<system_name>/simulate/<condition>', methods=['POST'])
+def simulate_condition(system_name, condition):
+    """Simule une condition pathologique"""
+    if system_name not in SYSTEMS:
+        return jsonify({
+            "error": "System not found"
+        }), 404
+    
+    if condition not in SYSTEMS[system_name]["conditions"]:
+        return jsonify({
+            "error": "Invalid condition",
+            "message": f"Condition '{condition}' not available for {system_name}",
+            "available_conditions": SYSTEMS[system_name]["conditions"]
+        }), 400
+    
+    # Mettre à jour l'état du système
+    system_states[system_name] = condition
+    if condition != "normal" and condition not in active_conditions[system_name]:
+        active_conditions[system_name].append(condition)
+    
+    # Générer les nouvelles métriques
+    metrics = generate_metrics(system_name, condition)
+    health = get_health_status(system_name, metrics)
+    
+    response = {
+        "success": True,
+        "system": system_name,
+        "name": SYSTEMS[system_name]["name"],
+        "condition_applied": condition,
+        "health_status": health,
+        "new_metrics": metrics,
+        "message": f"{condition.capitalize()} simulation activated for {SYSTEMS[system_name]['name']}",
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    # Format spécial pour immune
+    if system_name == "immune":
+        response["white_blood_cells"] = metrics.get("white_blood_cells", 0)
+        response["body_temperature"] = metrics.get("body_temperature", 37.0)
+    
+    return jsonify(response)
+
+# ===================== NOUVEAUX ENDPOINTS POUR TESTS =======================
+
+@app.route('/api/<system_name>/parameters', methods=['GET'])
+def get_parameters(system_name):
+    """Récupère les paramètres de configuration d'un système"""
+    if system_name not in SYSTEMS:
+        return jsonify({
+            "error": "System not found",
+            "available_systems": list(SYSTEMS.keys())
+        }), 404
+    
+    return jsonify({
+        "system": system_name,
+        "name": SYSTEMS[system_name]["name"],
+        "parameters": system_parameters.get(system_name, {}),
+        "default_parameters": SYSTEMS[system_name]["parameters"],
+        "timestamp": datetime.now().isoformat()
+    })
+
+@app.route('/api/<system_name>/configure', methods=['POST'])
+def configure_system(system_name):
+    """Configure les paramètres d'un système ou du patient"""
+    if system_name not in SYSTEMS:
+        return jsonify({
+            "error": "System not found",
+            "available_systems": list(SYSTEMS.keys())
+        }), 404
+    
+    data = request.get_json() or {}
+    
+    # Configuration patient
+    if "patient" in data:
+        patient_data = data["patient"]
+        for key in ["age", "weight", "height", "gender"]:
+            if key in patient_data:
+                patient_config[key] = patient_data[key]
         
-    def generate_immune_data(self):
-        """Génère des données synthétiques du système immunitaire"""
-        try:
-            # Valeurs de base selon l'état de santé
-            base_multipliers = {
-                "normal": 1.0,
-                "infection": 1.5,
-                "autoimmune": 0.7,
-                "immunodeficiency": 0.4,
-                "allergic_reaction": 1.3
-            }
-            
-            multiplier = base_multipliers.get(self.health_status, 1.0)
-            
-            # Globules blancs (leucocytes) - normal: 4000-11000/mm³
-            white_blood_cells = int(random.uniform(4000, 11000) * multiplier)
-            
-            # Types de leucocytes (en pourcentage)
-            neutrophils = random.uniform(40, 70) * multiplier
-            lymphocytes = random.uniform(20, 40)
-            monocytes = random.uniform(2, 8)
-            eosinophils = random.uniform(1, 4) * (1.5 if "allergic" in self.health_status else 1.0)
-            basophils = random.uniform(0.5, 1)
-            
-            # Normalisation pour avoir 100%
-            total = neutrophils + lymphocytes + monocytes + eosinophils + basophils
-            if total == 0:
-                total = 1  # Éviter division par zéro
-                
-            neutrophils = (neutrophils / total) * 100
-            lymphocytes = (lymphocytes / total) * 100
-            monocytes = (monocytes / total) * 100
-            eosinophils = (eosinophils / total) * 100
-            basophils = (basophils / total) * 100
-            
-            # Immunoglobulines (en g/L)
-            igg = random.uniform(7, 16) * multiplier
-            iga = random.uniform(0.7, 4) * multiplier
-            igm = random.uniform(0.4, 2.3) * multiplier
-            ige = random.uniform(0, 100) * (2.0 if "allergic" in self.health_status else 1.0)
-            
-            # Cytokines (niveau d'inflammation)
-            inflammation_level = random.uniform(0, 10) * multiplier
-            
-            # Température corporelle
-            temperature = 36.5 + random.uniform(-0.3, 0.3)
-            if self.health_status == "infection":
-                temperature += random.uniform(1, 3)
-            
-            # Activité des cellules NK (Natural Killer)
-            nk_activity = random.uniform(10, 40) * multiplier
-            
-            # Complément (système du complément)
-            complement_c3 = random.uniform(0.9, 1.8)
-            complement_c4 = random.uniform(0.1, 0.4)
-            
-            return {
-                "timestamp": datetime.now().isoformat(),
-                "patient_info": {
-                    "age": self.age,
-                    "sex": self.sex,
-                    "health_status": self.health_status
-                },
-                "white_blood_cells": {
-                    "total_count": white_blood_cells,
-                    "unit": "cells/mm³",
-                    "differential": {
-                        "neutrophils": round(neutrophils, 2),
-                        "lymphocytes": round(lymphocytes, 2),
-                        "monocytes": round(monocytes, 2),
-                        "eosinophils": round(eosinophils, 2),
-                        "basophils": round(basophils, 2)
-                    }
-                },
-                "immunoglobulins": {
-                    "IgG": round(igg, 2),
-                    "IgA": round(iga, 2),
-                    "IgM": round(igm, 2),
-                    "IgE": round(ige, 2),
-                    "unit": "g/L (IgE en UI/mL)"
-                },
-                "inflammation": {
-                    "level": round(inflammation_level, 2),
-                    "temperature": round(temperature, 1),
-                    "cytokine_activity": "elevated" if inflammation_level > 5 else "normal"
-                },
-                "cellular_immunity": {
-                    "nk_cell_activity": round(nk_activity, 2),
-                    "unit": "%"
-                },
-                "complement_system": {
-                    "C3": round(complement_c3, 2),
-                    "C4": round(complement_c4, 2),
-                    "unit": "g/L"
-                },
-                "active_conditions": self.active_conditions
-            }
-        except Exception as e:
-            logger.error(f"Erreur lors de la génération des données: {str(e)}")
-            raise
+        return jsonify({
+            "success": True,
+            "message": "Patient configuration updated",
+            "patient": patient_config,
+            "timestamp": datetime.now().isoformat()
+        })
     
-    def simulate_condition(self, condition):
-        """Simule une condition pathologique"""
-        try:
-            valid_conditions = {
-                "infection": "État infectieux actif",
-                "autoimmune": "Maladie auto-immune",
-                "immunodeficiency": "Immunodéficience",
-                "allergic_reaction": "Réaction allergique",
-                "normal": "État normal"
-            }
-            
-            if condition in valid_conditions:
-                self.health_status = condition
-                if condition not in self.active_conditions and condition != "normal":
-                    self.active_conditions.append(condition)
-                elif condition == "normal":
-                    self.active_conditions = []
-                logger.info(f"Condition simulée: {condition}")
-                return True, valid_conditions[condition]
-            return False, "Condition inconnue"
-        except Exception as e:
-            logger.error(f"Erreur lors de la simulation: {str(e)}")
-            return False, f"Erreur: {str(e)}"
+    # Configuration système
+    if "parameters" in data:
+        params = data["parameters"]
+        if system_name not in system_parameters:
+            system_parameters[system_name] = {}
+        
+        for key, value in params.items():
+            if key in SYSTEMS[system_name]["parameters"]:
+                system_parameters[system_name][key] = value
+        
+        return jsonify({
+            "success": True,
+            "message": f"Parameters updated for {SYSTEMS[system_name]['name']}",
+            "system": system_name,
+            "parameters": system_parameters[system_name],
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    return jsonify({
+        "error": "No configuration data provided",
+        "expected_format": {
+            "patient": {"age": 35, "weight": 70, "height": 175, "gender": "M"},
+            "parameters": {"param_name": "value"}
+        }
+    }), 400
 
-# Instance globale du simulateur
-simulator = ImmuneSystemSimulator()
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Santé globale du groupe"""
+    return jsonify({
+        "service": "Specialized Systems API",
+        "port": 5004,
+        "status": "healthy",
+        "systems_count": len(SYSTEMS),
+        "patient_configured": patient_config,
+        "timestamp": datetime.now().isoformat()
+    })
 
-# Gestionnaire d'erreurs global
+# ===================== GESTION DES ERREURS =======================
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({
-        "error": "Endpoint non trouvé",
-        "message": "L'URL demandée n'existe pas",
-        "available_endpoints": {
-            "home": "/",
-            "status": "/api/immune/status",
-            "data": "/api/immune/data",
-            "simulate": "/api/immune/simulate/<condition>",
-            "parameters": "/api/immune/parameters",
-            "configure": "/api/immune/configure"
-        }
+        "error": "Endpoint not found",
+        "timestamp": datetime.now().isoformat()
     }), 404
 
 @app.errorhandler(500)
 def internal_error(error):
-    logger.error(f"Erreur serveur: {str(error)}")
     return jsonify({
-        "error": "Erreur interne du serveur",
-        "message": "Une erreur s'est produite lors du traitement de votre requête"
+        "error": "Internal server error",
+        "message": str(error),
+        "timestamp": datetime.now().isoformat()
     }), 500
 
-@app.errorhandler(Exception)
-def handle_exception(e):
-    logger.error(f"Exception non gérée: {str(e)}", exc_info=True)
-    return jsonify({
-        "error": "Erreur inattendue",
-        "message": str(e)
-    }), 500
-
-@app.route('/')
-def home():
-    """Page d'accueil de l'API"""
-    return jsonify({
-        "api": "Immune System API",
-        "version": "1.0.0",
-        "description": "API de simulation du système immunitaire",
-        "status": "opérationnel",
-        "endpoints": {
-            "status": "/api/immune/status",
-            "data": "/api/immune/data",
-            "simulate": "/api/immune/simulate/<condition>",
-            "parameters": "/api/immune/parameters",
-            "configure": "/api/immune/configure"
-        }
-    })
-
-@app.route('/api/immune/status', methods=['GET'])
-def get_status():
-    """Retourne le statut du système immunitaire"""
-    try:
-        return jsonify({
-            "status": "operational",
-            "organ": "immune_system",
-            "health_status": simulator.health_status,
-            "active_conditions": simulator.active_conditions,
-            "timestamp": datetime.now().isoformat()
-        })
-    except Exception as e:
-        logger.error(f"Erreur dans get_status: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/immune/data', methods=['GET'])
-def get_data():
-    """Retourne les données synthétiques courantes"""
-    try:
-        return jsonify(simulator.generate_immune_data())
-    except Exception as e:
-        logger.error(f"Erreur dans get_data: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/immune/simulate/<condition>', methods=['POST'])
-def simulate_condition(condition):
-    """Simule une pathologie du système immunitaire"""
-    try:
-        success, message = simulator.simulate_condition(condition)
-        
-        if success:
-            return jsonify({
-                "success": True,
-                "condition": condition,
-                "message": message,
-                "current_data": simulator.generate_immune_data()
-            })
-        else:
-            return jsonify({
-                "success": False,
-                "error": message
-            }), 400
-    except Exception as e:
-        logger.error(f"Erreur dans simulate_condition: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/immune/parameters', methods=['GET'])
-def get_parameters():
-    """Retourne les paramètres de simulation disponibles"""
-    try:
-        return jsonify({
-            "available_conditions": {
-                "infection": "État infectieux - augmentation des leucocytes et inflammation",
-                "autoimmune": "Maladie auto-immune - dérèglement du système immunitaire",
-                "immunodeficiency": "Immunodéficience - diminution des défenses",
-                "allergic_reaction": "Réaction allergique - augmentation IgE et éosinophiles",
-                "normal": "Retour à l'état normal"
-            },
-            "modifiable_parameters": {
-                "age": "Âge du patient (années)",
-                "sex": "Sexe du patient (M/F)",
-                "health_status": "État de santé actuel"
-            },
-            "measured_values": {
-                "white_blood_cells": "Nombre de globules blancs",
-                "immunoglobulins": "Taux d'immunoglobulines (IgG, IgA, IgM, IgE)",
-                "inflammation": "Niveau d'inflammation et température",
-                "cellular_immunity": "Activité des cellules NK",
-                "complement": "Système du complément"
-            }
-        })
-    except Exception as e:
-        logger.error(f"Erreur dans get_parameters: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/immune/configure', methods=['POST'])
-def configure():
-    """Configure les paramètres du patient"""
-    try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({
-                "success": False,
-                "error": "Aucune donnée JSON fournie"
-            }), 400
-        
-        # Validation des données
-        if 'age' in data:
-            try:
-                age = int(data['age'])
-                if age < 0 or age > 120:
-                    return jsonify({
-                        "success": False,
-                        "error": "L'âge doit être entre 0 et 120 ans"
-                    }), 400
-                simulator.age = age
-            except (ValueError, TypeError):
-                return jsonify({
-                    "success": False,
-                    "error": "L'âge doit être un nombre entier"
-                }), 400
-        
-        if 'sex' in data:
-            sex = str(data['sex']).upper()
-            if sex not in ['M', 'F']:
-                return jsonify({
-                    "success": False,
-                    "error": "Le sexe doit être 'M' ou 'F'"
-                }), 400
-            simulator.sex = sex
-        
-        if 'health_status' in data:
-            valid_statuses = ["normal", "infection", "autoimmune", "immunodeficiency", "allergic_reaction"]
-            if data['health_status'] not in valid_statuses:
-                return jsonify({
-                    "success": False,
-                    "error": f"État de santé invalide. Valeurs acceptées: {', '.join(valid_statuses)}"
-                }), 400
-            simulator.health_status = data['health_status']
-        
-        logger.info(f"Configuration mise à jour: age={simulator.age}, sex={simulator.sex}, status={simulator.health_status}")
-        
-        return jsonify({
-            "success": True,
-            "message": "Configuration mise à jour",
-            "current_config": {
-                "age": simulator.age,
-                "sex": simulator.sex,
-                "health_status": simulator.health_status
-            }
-        })
-    except Exception as e:
-        logger.error(f"Erreur dans configure: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+# ===================== LANCEMENT =======================
 
 if __name__ == '__main__':
-    try:
-        logger.info("=" * 60)
-        logger.info("Démarrage de l'API Immune System")
-        logger.info("=" * 60)
-        logger.info("URL: http://127.0.0.1:5004")
-        logger.info("Appuyez sur Ctrl+C pour arrêter le serveur")
-        logger.info("=" * 60)
-        
-        app.run(debug=True, port=5004, host='0.0.0.0')
-    except KeyboardInterrupt:
-        logger.info("\nArrêt du serveur...")
-        sys.exit(0)
-    except Exception as e:
-        logger.error(f"Erreur fatale: {str(e)}", exc_info=True)
-        sys.exit(1)
+    print("="*70)
+    print(" "*15 + "🔵 GROUPE SPÉCIALISÉ - API v2.0")
+    print("="*70)
+    print(f"\n✅ Port: 5004")
+    print(f"✅ Systèmes gérés: {len(SYSTEMS)}")
+    print("\n📋 Systèmes disponibles:")
+    for sys_name, sys_info in SYSTEMS.items():
+        conditions_count = len(sys_info['conditions'])
+        print(f"   {sys_info['icon']} {sys_info['name']:30} ({conditions_count} conditions)")
+    print("\n🔧 Endpoints disponibles:")
+    print("   • /api/<system>/status          - Statut du système")
+    print("   • /api/<system>/data            - Données détaillées")
+    print("   • /api/<system>/simulate/<cond> - Simuler une condition")
+    print("   • /api/<system>/parameters      - Paramètres système")
+    print("   • /api/<system>/configure       - Configurer patient/système")
+    print("\n" + "="*70)
+    print("🌐 API lancée sur: http://localhost:5004")
+    print("="*70 + "\n")
+    
+    app.run(debug=True, port=5004, host='0.0.0.0')
