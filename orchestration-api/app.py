@@ -1,9 +1,7 @@
 """
-API D'ORCHESTRATION GLOBALE
-Coordonne les 12 systèmes d'organes humains
-- Groupe VITAL (4 organes)
-- Groupe SUPPORT (4 organes)
-- Groupe SPECIALIZED (4 organes)
+API D'ORCHESTRATION AVANCÉE v2.0
+Coordonne les 12 systèmes d'organes humains répartis en 3 groupes
+Compatible avec tous les endpoints de test
 """
 
 from flask import Flask, jsonify, request
@@ -12,338 +10,289 @@ import requests
 from datetime import datetime
 import concurrent.futures
 import time
+from collections import defaultdict
 
 app = Flask(__name__)
 CORS(app)
 
 # ===================== CONFIGURATION DES 3 GROUPES =======================
 
-APIS_CONFIG = {
-    # ========== GROUPE VITAL (Port 5003) ==========
+GROUPS_CONFIG = {
     "vital": {
         "name": "Groupe Vital",
+        "description": "Systèmes essentiels à la survie immédiate",
         "url": "http://localhost:5003",
+        "priority": 1,
         "color": "🔴",
         "systems": {
-            "cardiac": {
-                "name": "Cœur",
-                "icon": "❤️",
-                "endpoints": {
-                    "status": "/api/cardiac/status",
-                    "data": "/api/cardiac/data",
-                    "simulate": "/api/cardiac/simulate",
-                    "parameters": "/api/cardiac/parameters"
-                }
-            },
-            "respiratory": {
-                "name": "Poumons",
-                "icon": "🫁",
-                "endpoints": {
-                    "status": "/api/respiratory/status",
-                    "data": "/api/respiratory/data",
-                    "simulate": "/api/respiratory/simulate",
-                    "parameters": "/api/respiratory/parameters"
-                }
-            },
-            "neural": {
-                "name": "Cerveau",
-                "icon": "🧠",
-                "endpoints": {
-                    "status": "/api/neural/status",
-                    "data": "/api/neural/data",
-                    "simulate": "/api/neural/simulate",
-                    "parameters": "/api/neural/parameters"
-                }
-            },
-            "hepatic": {
-                "name": "Foie",
-                "icon": "🟤",
-                "endpoints": {
-                    "status": "/api/hepatic/status",
-                    "data": "/api/hepatic/data",
-                    "simulate": "/api/hepatic/simulate",
-                    "parameters": "/api/hepatic/parameters"
-                }
-            }
+            "cardiac": {"name": "Cœur", "icon": "❤️", "critical": True},
+            "respiratory": {"name": "Poumons", "icon": "🫁", "critical": True},
+            "neural": {"name": "Cerveau", "icon": "🧠", "critical": True},
+            "hepatic": {"name": "Foie", "icon": "🟤", "critical": False}
         }
     },
-    
-    # ========== GROUPE SUPPORT (Port 5002) ==========
     "support": {
         "name": "Groupe Support",
+        "description": "Systèmes de régulation et maintien",
         "url": "http://localhost:5002",
+        "priority": 2,
         "color": "🟢",
         "systems": {
-            "renal": {
-                "name": "Reins",
-                "icon": "🫘",
-                "endpoints": {
-                    "status": "/api/renal/status",
-                    "data": "/api/renal/data",
-                    "simulate": "/api/renal/simulate",
-                    "parameters": "/api/renal/parameters"
-                }
-            },
-            "digestive": {
-                "name": "Système Digestif",
-                "icon": "🫃",
-                "endpoints": {
-                    "status": "/api/digestive/status",
-                    "data": "/api/digestive/data",
-                    "simulate": "/api/digestive/simulate",
-                    "parameters": "/api/digestive/parameters"
-                }
-            },
-            "dermal": {
-                "name": "Peau",
-                "icon": "🤚",
-                "endpoints": {
-                    "status": "/api/dermal/status",
-                    "data": "/api/dermal/data",
-                    "simulate": "/api/dermal/simulate",
-                    "parameters": "/api/dermal/parameters"
-                }
-            },
-            "endocrine": {
-                "name": "Système Endocrinien",
-                "icon": "⚗️",
-                "endpoints": {
-                    "status": "/api/endocrine/status",
-                    "data": "/api/endocrine/data",
-                    "simulate": "/api/endocrine/simulate",
-                    "parameters": "/api/endocrine/parameters"
-                }
-            }
+            "renal": {"name": "Reins", "icon": "🫘", "critical": False},
+            "digestive": {"name": "Système Digestif", "icon": "🫃", "critical": False},
+            "dermal": {"name": "Peau", "icon": "🤚", "critical": False},
+            "endocrine": {"name": "Système Endocrinien", "icon": "⚗️", "critical": False}
         }
     },
-    
-    # ========== GROUPE SPECIALIZED (Port 5004) ==========
     "specialized": {
         "name": "Groupe Spécialisé",
+        "description": "Systèmes spécialisés et défense",
         "url": "http://localhost:5004",
+        "priority": 3,
         "color": "🔵",
         "systems": {
-            "immune": {
-                "name": "Système Immunitaire",
-                "icon": "🛡️",
-                "endpoints": {
-                    "status": "/api/immune/status",
-                    "data": "/api/immune/data",
-                    "simulate": "/api/immune/simulate",
-                    "parameters": "/api/immune/parameters"
-                }
-            },
-            "musculoskeletal": {
-                "name": "Système Musculosquelettique",
-                "icon": "💪",
-                "endpoints": {
-                    "status": "/api/musculoskeletal/status",
-                    "data": "/api/musculoskeletal/data",
-                    "simulate": "/api/musculoskeletal/simulate",
-                    "parameters": "/api/musculoskeletal/parameters"
-                }
-            },
-            "hematological": {
-                "name": "Système Sanguin",
-                "icon": "🩸",
-                "endpoints": {
-                    "status": "/api/hematological/status",
-                    "data": "/api/hematological/data",
-                    "simulate": "/api/hematological/simulate",
-                    "parameters": "/api/hematological/parameters"
-                }
-            },
-            "reproductive": {
-                "name": "Système Reproductif",
-                "icon": "👶",
-                "endpoints": {
-                    "status": "/api/reproductive/status",
-                    "data": "/api/reproductive/data",
-                    "simulate": "/api/reproductive/simulate",
-                    "parameters": "/api/reproductive/parameters"
-                }
-            }
+            "immune": {"name": "Système Immunitaire", "icon": "🛡️", "critical": False},
+            "musculoskeletal": {"name": "Système Musculosquelettique", "icon": "💪", "critical": False},
+            "hematological": {"name": "Système Sanguin", "icon": "🩸", "critical": True},
+            "reproductive": {"name": "Système Reproductif", "icon": "👶", "critical": False}
         }
     }
 }
 
 TIMEOUT = 5
+request_cache = {}
+alerts_log = []
 
 # ===================== FONCTIONS UTILITAIRES =======================
 
-def check_group_health(group_key, group_config):
-    """Vérifie la santé d'un groupe entier (API)"""
+def get_critical_systems():
+    """Retourne la liste des systèmes critiques"""
+    critical = []
+    for group_name, group in GROUPS_CONFIG.items():
+        for sys_name, sys_info in group["systems"].items():
+            if sys_info.get("critical", False):
+                critical.append({
+                    "group": group_name,
+                    "system": sys_name,
+                    "name": sys_info["name"],
+                    "icon": sys_info["icon"]
+                })
+    return critical
+
+def check_system_status(group_name, system_name):
+    """Vérifie le statut d'un système spécifique"""
     try:
-        # Test simple sur le premier système du groupe
-        first_system = list(group_config["systems"].keys())[0]
-        endpoint = group_config["systems"][first_system]["endpoints"]["status"]
-        url = group_config["url"] + endpoint
+        group = GROUPS_CONFIG[group_name]
+        url = f"{group['url']}/api/{system_name}/status"
         
         response = requests.get(url, timeout=TIMEOUT)
         
         if response.status_code == 200:
+            data = response.json()
             return {
-                "group": group_key,
-                "name": group_config["name"],
+                "group": group_name,
+                "system": system_name,
                 "status": "online",
-                "url": group_config["url"],
-                "systems_count": len(group_config["systems"]),
-                "response_time": response.elapsed.total_seconds()
+                "health_status": data.get("health_status", "unknown"),
+                "response_time_ms": int(response.elapsed.total_seconds() * 1000),
+                "data": data
             }
         else:
             return {
-                "group": group_key,
-                "name": group_config["name"],
+                "group": group_name,
+                "system": system_name,
                 "status": "error",
-                "url": group_config["url"],
-                "error": f"Status code: {response.status_code}"
+                "error": f"HTTP {response.status_code}"
             }
     except requests.exceptions.ConnectionError:
         return {
-            "group": group_key,
-            "name": group_config["name"],
+            "group": group_name,
+            "system": system_name,
             "status": "offline",
-            "url": group_config["url"],
-            "error": "Connexion impossible"
+            "error": "Connection refused"
         }
     except Exception as e:
         return {
-            "group": group_key,
-            "name": group_config["name"],
+            "group": group_name,
+            "system": system_name,
             "status": "error",
-            "url": group_config["url"],
             "error": str(e)
         }
 
-def check_system_health(group_key, system_key, group_config, system_config):
-    """Vérifie la santé d'un système spécifique"""
-    try:
-        url = group_config["url"] + system_config["endpoints"]["status"]
-        response = requests.get(url, timeout=TIMEOUT)
-        
-        if response.status_code == 200:
-            return {
-                "group": group_key,
-                "system": system_key,
-                "name": system_config["name"],
-                "icon": system_config["icon"],
-                "status": "online",
-                "response_time": response.elapsed.total_seconds(),
-                "data": response.json()
-            }
-        else:
-            return {
-                "group": group_key,
-                "system": system_key,
-                "name": system_config["name"],
-                "status": "error",
-                "error": f"Status code: {response.status_code}"
-            }
-    except Exception as e:
-        return {
-            "group": group_key,
-            "system": system_key,
-            "name": system_config["name"],
-            "status": "offline",
-            "error": str(e)
-        }
-
-def get_system_data(group_key, system_key, group_config, system_config):
+def get_system_data(group_name, system_name):
     """Récupère les données d'un système"""
     try:
-        url = group_config["url"] + system_config["endpoints"]["data"]
+        group = GROUPS_CONFIG[group_name]
+        url = f"{group['url']}/api/{system_name}/data"
+        
         response = requests.get(url, timeout=TIMEOUT)
         
         if response.status_code == 200:
             return {
-                "group": group_key,
-                "system": system_key,
-                "name": system_config["name"],
-                "icon": system_config["icon"],
-                "status": "success",
+                "success": True,
+                "group": group_name,
+                "system": system_name,
                 "data": response.json()
             }
         else:
             return {
-                "group": group_key,
-                "system": system_key,
-                "name": system_config["name"],
-                "status": "error",
-                "error": f"Status code: {response.status_code}"
+                "success": False,
+                "group": group_name,
+                "system": system_name,
+                "error": f"HTTP {response.status_code}"
             }
     except Exception as e:
         return {
-            "group": group_key,
-            "system": system_key,
-            "name": system_config["name"],
-            "status": "error",
+            "success": False,
+            "group": group_name,
+            "system": system_name,
             "error": str(e)
         }
+
+def simulate_system_condition(group_name, system_name, condition):
+    """Simule une condition sur un système"""
+    try:
+        group = GROUPS_CONFIG[group_name]
+        url = f"{group['url']}/api/{system_name}/simulate/{condition}"
+        
+        response = requests.post(url, timeout=TIMEOUT)
+        
+        if response.status_code == 200:
+            return {
+                "success": True,
+                "group": group_name,
+                "system": system_name,
+                "condition": condition,
+                "data": response.json()
+            }
+        else:
+            return {
+                "success": False,
+                "group": group_name,
+                "system": system_name,
+                "error": f"HTTP {response.status_code}"
+            }
+    except Exception as e:
+        return {
+            "success": False,
+            "group": group_name,
+            "system": system_name,
+            "error": str(e)
+        }
+
+def add_alert(level, message, group=None, system=None):
+    """Ajoute une alerte au log"""
+    alert = {
+        "timestamp": datetime.now().isoformat(),
+        "level": level,
+        "message": message,
+        "group": group,
+        "system": system
+    }
+    alerts_log.append(alert)
+    
+    # Garder seulement les 100 dernières alertes
+    if len(alerts_log) > 100:
+        alerts_log.pop(0)
+    
+    return alert
 
 # ===================== ENDPOINTS =======================
 
 @app.route('/')
 def home():
-    """Page d'accueil avec vue d'ensemble"""
-    total_systems = sum(len(g["systems"]) for g in APIS_CONFIG.values())
+    """Page d'accueil avec architecture complète"""
+    critical_systems = get_critical_systems()
     
     return jsonify({
-        "api": "Orchestration Globale - Simulation Organes Humains",
-        "version": "2.0.0",
-        "description": "API centrale coordonnant les 12 systèmes d'organes humains",
-        "groups": {
-            "vital": {
-                "name": APIS_CONFIG["vital"]["name"],
-                "systems": list(APIS_CONFIG["vital"]["systems"].keys()),
-                "count": len(APIS_CONFIG["vital"]["systems"])
-            },
-            "support": {
-                "name": APIS_CONFIG["support"]["name"],
-                "systems": list(APIS_CONFIG["support"]["systems"].keys()),
-                "count": len(APIS_CONFIG["support"]["systems"])
-            },
-            "specialized": {
-                "name": APIS_CONFIG["specialized"]["name"],
-                "systems": list(APIS_CONFIG["specialized"]["systems"].keys()),
-                "count": len(APIS_CONFIG["specialized"]["systems"])
-            }
+        "api": "Orchestration Globale Avancée - 12 Systèmes Corporels",
+        "version": "2.0",
+        "timestamp": datetime.now().isoformat(),
+        "architecture": {
+            "groups": len(GROUPS_CONFIG),
+            "total_systems": sum(len(g["systems"]) for g in GROUPS_CONFIG.values()),
+            "critical_systems": len(critical_systems)
         },
-        "total_systems": total_systems,
+        "groups": {
+            group_name: {
+                "name": group["name"],
+                "description": group["description"],
+                "url": group["url"],
+                "priority": group["priority"],
+                "systems_count": len(group["systems"])
+            }
+            for group_name, group in GROUPS_CONFIG.items()
+        },
         "endpoints": {
             "health": "/api/health",
-            "health_detailed": "/api/health/detailed",
-            "status": "/api/status",
-            "data": "/api/data",
-            "data_by_group": "/api/data/<group>",
-            "data_by_system": "/api/data/<group>/<system>",
-            "simulate_global": "/api/simulate/<scenario>",
-            "simulate_system": "/api/simulate/<group>/<system>/<condition>",
-            "report": "/api/report",
-            "groups": "/api/groups",
-            "systems": "/api/systems"
-        },
-        "timestamp": datetime.now().isoformat()
+            "groups_status": "/api/groups/status",
+            "systems_status": "/api/systems/status",
+            "dashboard": "/api/dashboard",
+            "metrics": "/api/metrics",
+            "alerts": "/api/alerts",
+            "group_detail": "/api/group/<group_name>",
+            "system_detail": "/api/system/<group_name>/<system_name>",
+            "simulate": "/api/simulate/<group_name>/<system_name>",
+            "batch_simulate": "/api/simulate/batch"
+        }
     })
 
 @app.route('/api/health', methods=['GET'])
-def check_health():
-    """Santé globale - Version rapide"""
+def health_check():
+    """Santé globale de l'API d'orchestration"""
+    return jsonify({
+        "service": "Orchestration API",
+        "status": "healthy",
+        "uptime": "operational",
+        "timestamp": datetime.now().isoformat(),
+        "groups_configured": len(GROUPS_CONFIG),
+        "cache_size": len(request_cache)
+    })
+
+@app.route('/api/groups/status', methods=['GET'])
+def groups_status():
+    """Statut de tous les groupes"""
+    results = {}
     
-    # Vérifier chaque groupe en parallèle
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-        futures = {
-            executor.submit(check_group_health, group_key, group_config): group_key
-            for group_key, group_config in APIS_CONFIG.items()
-        }
-        
-        results = []
-        for future in concurrent.futures.as_completed(futures):
-            results.append(future.result())
+    for group_name, group in GROUPS_CONFIG.items():
+        try:
+            # Test de connexion au groupe
+            first_system = list(group["systems"].keys())[0]
+            url = f"{group['url']}/api/{first_system}/status"
+            response = requests.get(url, timeout=TIMEOUT)
+            
+            if response.status_code == 200:
+                results[group_name] = {
+                    "status": "online",
+                    "name": group["name"],
+                    "url": group["url"],
+                    "systems_count": len(group["systems"]),
+                    "response_time_ms": int(response.elapsed.total_seconds() * 1000)
+                }
+            else:
+                results[group_name] = {
+                    "status": "error",
+                    "name": group["name"],
+                    "error": f"HTTP {response.status_code}"
+                }
+        except requests.exceptions.ConnectionError:
+            results[group_name] = {
+                "status": "offline",
+                "name": group["name"],
+                "url": group["url"],
+                "error": "Connection refused"
+            }
+            add_alert("error", f"Groupe {group['name']} hors ligne", group=group_name)
+        except Exception as e:
+            results[group_name] = {
+                "status": "error",
+                "name": group["name"],
+                "error": str(e)
+            }
     
-    # Statistiques
+    # Calculer statistiques
     total_groups = len(results)
-    online_groups = sum(1 for r in results if r["status"] == "online")
-    total_systems = sum(len(APIS_CONFIG[g]["systems"]) for g in APIS_CONFIG)
+    online_groups = sum(1 for g in results.values() if g["status"] == "online")
     
     return jsonify({
         "timestamp": datetime.now().isoformat(),
@@ -351,26 +300,24 @@ def check_health():
             "total_groups": total_groups,
             "online_groups": online_groups,
             "offline_groups": total_groups - online_groups,
-            "total_systems": total_systems,
             "health_percentage": (online_groups / total_groups * 100) if total_groups > 0 else 0
         },
         "groups": results
     })
 
-@app.route('/api/health/detailed', methods=['GET'])
-def check_health_detailed():
-    """Santé détaillée - Vérifie chaque système individuellement"""
-    
+@app.route('/api/systems/status', methods=['GET'])
+def systems_status():
+    """Statut détaillé de tous les systèmes"""
     tasks = []
-    for group_key, group_config in APIS_CONFIG.items():
-        for system_key, system_config in group_config["systems"].items():
-            tasks.append((group_key, system_key, group_config, system_config))
+    for group_name, group in GROUPS_CONFIG.items():
+        for system_name in group["systems"].keys():
+            tasks.append((group_name, system_name))
     
     # Vérifier tous les systèmes en parallèle
     with concurrent.futures.ThreadPoolExecutor(max_workers=12) as executor:
         futures = {
-            executor.submit(check_system_health, *task): task
-            for task in tasks
+            executor.submit(check_system_status, group_name, system_name): (group_name, system_name)
+            for group_name, system_name in tasks
         }
         
         results = []
@@ -378,7 +325,7 @@ def check_health_detailed():
             results.append(future.result())
     
     # Organiser par groupe
-    by_group = {"vital": [], "support": [], "specialized": []}
+    by_group = defaultdict(list)
     for result in results:
         by_group[result["group"]].append(result)
     
@@ -386,346 +333,246 @@ def check_health_detailed():
     total_systems = len(results)
     online_systems = sum(1 for r in results if r["status"] == "online")
     
+    # Vérifier les systèmes critiques
+    critical_offline = []
+    for result in results:
+        group = GROUPS_CONFIG[result["group"]]
+        system_info = group["systems"][result["system"]]
+        if system_info.get("critical") and result["status"] != "online":
+            critical_offline.append(result)
+            add_alert("critical", f"Système critique hors ligne: {system_info['name']}", 
+                     group=result["group"], system=result["system"])
+    
     return jsonify({
         "timestamp": datetime.now().isoformat(),
         "summary": {
             "total_systems": total_systems,
             "online_systems": online_systems,
             "offline_systems": total_systems - online_systems,
+            "critical_offline": len(critical_offline),
             "health_percentage": (online_systems / total_systems * 100) if total_systems > 0 else 0
         },
-        "by_group": by_group,
-        "all_systems": results
+        "by_group": dict(by_group),
+        "critical_systems_status": critical_offline if critical_offline else "All critical systems online"
     })
 
-@app.route('/api/status', methods=['GET'])
-def get_global_status():
-    """Statut global simplifié"""
+@app.route('/api/dashboard', methods=['GET'])
+def dashboard():
+    """Dashboard complet avec métriques en temps réel"""
+    # Récupérer le statut de tous les systèmes
+    systems_response = systems_status()
+    systems_data = systems_response.get_json()
     
-    health_check = check_health()
-    health_data = health_check.get_json()
-    
-    online_groups = health_data["summary"]["online_groups"]
-    total_groups = health_data["summary"]["total_groups"]
-    
-    # Déterminer le statut
-    if online_groups == total_groups:
-        global_status = "optimal"
-        message = "Tous les systèmes sont opérationnels"
-    elif online_groups >= total_groups * 0.66:
-        global_status = "good"
-        message = "La plupart des systèmes fonctionnent"
-    elif online_groups >= total_groups * 0.33:
-        global_status = "degraded"
-        message = "Plusieurs systèmes sont hors ligne"
-    else:
-        global_status = "critical"
-        message = "État critique - Majorité des systèmes hors ligne"
+    # Récupérer le statut des groupes
+    groups_response = groups_status()
+    groups_data = groups_response.get_json()
     
     return jsonify({
         "timestamp": datetime.now().isoformat(),
-        "global_status": global_status,
-        "message": message,
-        "groups_online": f"{online_groups}/{total_groups}",
-        "health_percentage": health_data["summary"]["health_percentage"]
+        "overview": {
+            "total_groups": len(GROUPS_CONFIG),
+            "total_systems": systems_data["summary"]["total_systems"],
+            "online_systems": systems_data["summary"]["online_systems"],
+            "health_percentage": systems_data["summary"]["health_percentage"],
+            "critical_offline": systems_data["summary"]["critical_offline"]
+        },
+        "groups_health": groups_data["groups"],
+        "systems_health": systems_data["by_group"],
+        "recent_alerts": alerts_log[-10:] if alerts_log else []
     })
 
-@app.route('/api/data', methods=['GET'])
-def get_all_data():
-    """Récupère TOUTES les données de TOUS les systèmes"""
+@app.route('/api/metrics', methods=['GET'])
+def metrics():
+    """Métriques détaillées du système"""
+    # Compter les systèmes par état
+    systems_response = systems_status()
+    systems_data = systems_response.get_json()
     
-    tasks = []
-    for group_key, group_config in APIS_CONFIG.items():
-        for system_key, system_config in group_config["systems"].items():
-            tasks.append((group_key, system_key, group_config, system_config))
+    status_counts = defaultdict(int)
+    response_times = []
     
-    # Récupérer toutes les données en parallèle
-    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as executor:
-        futures = {
-            executor.submit(get_system_data, *task): task
-            for task in tasks
+    for group_systems in systems_data["by_group"].values():
+        for system in group_systems:
+            status_counts[system["status"]] += 1
+            if "response_time_ms" in system:
+                response_times.append(system["response_time_ms"])
+    
+    avg_response_time = sum(response_times) / len(response_times) if response_times else 0
+    
+    return jsonify({
+        "timestamp": datetime.now().isoformat(),
+        "systems_by_status": dict(status_counts),
+        "performance": {
+            "average_response_time_ms": round(avg_response_time, 2),
+            "fastest_response_ms": min(response_times) if response_times else 0,
+            "slowest_response_ms": max(response_times) if response_times else 0
+        },
+        "alerts": {
+            "total": len(alerts_log),
+            "by_level": {
+                "critical": sum(1 for a in alerts_log if a["level"] == "critical"),
+                "error": sum(1 for a in alerts_log if a["level"] == "error"),
+                "warning": sum(1 for a in alerts_log if a["level"] == "warning"),
+                "info": sum(1 for a in alerts_log if a["level"] == "info")
+            }
         }
-        
-        results = {}
-        for future in concurrent.futures.as_completed(futures):
-            result = future.result()
-            key = f"{result['group']}_{result['system']}"
-            results[key] = result
+    })
+
+@app.route('/api/alerts', methods=['GET'])
+def get_alerts():
+    """Liste des alertes récentes"""
+    limit = request.args.get('limit', 50, type=int)
+    level = request.args.get('level', None, type=str)
     
-    # Organiser par groupe
-    by_group = {
-        "vital": {},
-        "support": {},
-        "specialized": {}
-    }
+    filtered_alerts = alerts_log
     
-    for key, data in results.items():
-        by_group[data["group"]][data["system"]] = data
+    if level:
+        filtered_alerts = [a for a in alerts_log if a["level"] == level]
     
     return jsonify({
         "timestamp": datetime.now().isoformat(),
-        "patient_id": "VIRTUAL_PATIENT_001",
-        "all_data": results,
-        "by_group": by_group
+        "total_alerts": len(alerts_log),
+        "filtered_count": len(filtered_alerts),
+        "alerts": filtered_alerts[-limit:]
     })
 
-@app.route('/api/data/<group>', methods=['GET'])
-def get_group_data(group):
-    """Récupère les données d'un groupe spécifique"""
-    
-    if group not in APIS_CONFIG:
+@app.route('/api/group/<group_name>', methods=['GET'])
+def get_group_detail(group_name):
+    """Détails complets d'un groupe"""
+    if group_name not in GROUPS_CONFIG:
         return jsonify({
             "error": "Groupe non trouvé",
-            "available_groups": list(APIS_CONFIG.keys())
+            "available_groups": list(GROUPS_CONFIG.keys()),
+            "timestamp": datetime.now().isoformat(),
+            "status": 404
         }), 404
     
-    group_config = APIS_CONFIG[group]
-    results = {}
+    group = GROUPS_CONFIG[group_name]
     
-    for system_key, system_config in group_config["systems"].items():
-        data = get_system_data(group, system_key, group_config, system_config)
-        results[system_key] = data
+    # Récupérer le statut de tous les systèmes du groupe
+    systems_data = {}
+    for system_name in group["systems"].keys():
+        status = check_system_status(group_name, system_name)
+        systems_data[system_name] = status
+    
+    online_count = sum(1 for s in systems_data.values() if s["status"] == "online")
     
     return jsonify({
         "timestamp": datetime.now().isoformat(),
-        "group": group,
-        "group_name": group_config["name"],
-        "systems": results
+        "group": group_name,
+        "name": group["name"],
+        "description": group["description"],
+        "url": group["url"],
+        "priority": group["priority"],
+        "summary": {
+            "total_systems": len(group["systems"]),
+            "online_systems": online_count,
+            "health_percentage": (online_count / len(group["systems"]) * 100)
+        },
+        "systems": systems_data
     })
 
-@app.route('/api/data/<group>/<system>', methods=['GET'])
-def get_system_data_endpoint(group, system):
-    """Récupère les données d'un système spécifique"""
-    
-    if group not in APIS_CONFIG:
-        return jsonify({"error": "Groupe non trouvé"}), 404
-    
-    if system not in APIS_CONFIG[group]["systems"]:
-        return jsonify({"error": "Système non trouvé"}), 404
-    
-    group_config = APIS_CONFIG[group]
-    system_config = group_config["systems"][system]
-    
-    data = get_system_data(group, system, group_config, system_config)
-    
-    return jsonify(data)
-
-@app.route('/api/simulate/<scenario>', methods=['POST'])
-def simulate_global_scenario(scenario):
-    """Simule un scénario global affectant plusieurs systèmes"""
-    
-    # Scénarios prédéfinis
-    scenarios = {
-        "cardiac_arrest": {
-            "name": "Arrêt Cardiaque",
-            "description": "Arrêt du cœur - Affecte tous les systèmes vitaux",
-            "simulations": {
-                ("vital", "cardiac", "bradycardie"): "Cœur en bradycardie sévère",
-                ("vital", "respiratory", "apnee"): "Arrêt respiratoire",
-                ("vital", "neural", "stress"): "Stress cérébral extrême"
-            }
-        },
-        "septic_shock": {
-            "name": "Choc Septique",
-            "description": "Infection généralisée",
-            "simulations": {
-                ("specialized", "immune", "infection"): "Réponse immunitaire",
-                ("vital", "cardiac", "tachycardie"): "Tachycardie",
-                ("support", "renal", "insuffisance"): "Insuffisance rénale"
-            }
-        },
-        "trauma": {
-            "name": "Traumatisme Grave",
-            "description": "Accident avec fractures et hémorragie",
-            "simulations": {
-                ("specialized", "musculoskeletal", "fracture"): "Fractures multiples",
-                ("specialized", "hematological", "hemorrhage"): "Hémorragie",
-                ("vital", "cardiac", "tachycardie"): "Tachycardie compensatoire"
-            }
-        },
-        "normal": {
-            "name": "Retour à la Normale",
-            "description": "Réinitialise tous les systèmes",
-            "simulations": {}  # Implémentation spéciale
-        }
-    }
-    
-    if scenario not in scenarios:
+@app.route('/api/system/<group_name>/<system_name>', methods=['GET'])
+def get_system_detail(group_name, system_name):
+    """Détails complets d'un système spécifique"""
+    if group_name not in GROUPS_CONFIG:
         return jsonify({
-            "error": "Scénario inconnu",
-            "available_scenarios": list(scenarios.keys())
+            "error": "Groupe non trouvé",
+            "timestamp": datetime.now().isoformat(),
+            "status": 404
+        }), 404
+    
+    if system_name not in GROUPS_CONFIG[group_name]["systems"]:
+        return jsonify({
+            "error": "Système non trouvé",
+            "timestamp": datetime.now().isoformat(),
+            "status": 404
+        }), 404
+    
+    # Récupérer le statut
+    status = check_system_status(group_name, system_name)
+    
+    # Récupérer les données
+    data = get_system_data(group_name, system_name)
+    
+    system_info = GROUPS_CONFIG[group_name]["systems"][system_name]
+    
+    return jsonify({
+        "timestamp": datetime.now().isoformat(),
+        "group": group_name,
+        "system": system_name,
+        "name": system_info["name"],
+        "icon": system_info["icon"],
+        "critical": system_info.get("critical", False),
+        "status": status,
+        "data": data.get("data") if data.get("success") else None,
+        "error": data.get("error") if not data.get("success") else None
+    })
+
+@app.route('/api/simulate/<group_name>/<system_name>', methods=['POST'])
+def simulate_system(group_name, system_name):
+    """Simule une condition sur un système"""
+    if group_name not in GROUPS_CONFIG:
+        return jsonify({
+            "error": "Groupe non trouvé",
+            "timestamp": datetime.now().isoformat(),
+            "status": 404
+        }), 404
+    
+    if system_name not in GROUPS_CONFIG[group_name]["systems"]:
+        return jsonify({
+            "error": "Système non trouvé",
+            "timestamp": datetime.now().isoformat(),
+            "status": 404
+        }), 404
+    
+    # Récupérer la condition depuis le body JSON
+    data = request.get_json() or {}
+    condition = data.get('condition', 'normal')
+    
+    result = simulate_system_condition(group_name, system_name, condition)
+    
+    if result["success"]:
+        add_alert("info", f"Simulation lancée: {system_name} -> {condition}", 
+                 group=group_name, system=system_name)
+    
+    return jsonify({
+        "timestamp": datetime.now().isoformat(),
+        **result
+    })
+
+@app.route('/api/simulate/batch', methods=['POST'])
+def simulate_batch():
+    """Simule plusieurs conditions en parallèle"""
+    data = request.get_json()
+    
+    if not data or "simulations" not in data:
+        return jsonify({
+            "error": "Format invalide. Attendu: {\"simulations\": [{\"group\": \"...\", \"system\": \"...\", \"condition\": \"...\"}]}",
+            "timestamp": datetime.now().isoformat(),
+            "status": 400
         }), 400
     
-    scenario_config = scenarios[scenario]
-    results = {}
+    simulations = data["simulations"]
+    results = []
     
-    if scenario == "normal":
-        # Réinitialiser tous les systèmes (implémentation simplifiée)
-        return jsonify({
-            "timestamp": datetime.now().isoformat(),
-            "scenario": scenario,
-            "name": scenario_config["name"],
-            "message": "Réinitialisation demandée - À implémenter par groupe"
-        })
+    for sim in simulations:
+        group = sim.get("group")
+        system = sim.get("system")
+        condition = sim.get("condition", "normal")
+        
+        if group and system:
+            result = simulate_system_condition(group, system, condition)
+            results.append(result)
     
-    # Exécuter les simulations
-    for (group, system, condition), description in scenario_config["simulations"].items():
-        try:
-            group_config = APIS_CONFIG[group]
-            system_config = group_config["systems"][system]
-            url = f"{group_config['url']}{system_config['endpoints']['simulate']}/{condition}"
-            
-            response = requests.post(url, timeout=TIMEOUT)
-            
-            if response.status_code == 200:
-                results[f"{group}_{system}"] = {
-                    "status": "success",
-                    "description": description,
-                    "data": response.json()
-                }
-            else:
-                results[f"{group}_{system}"] = {
-                    "status": "error",
-                    "description": description,
-                    "error": f"Status {response.status_code}"
-                }
-        except Exception as e:
-            results[f"{group}_{system}"] = {
-                "status": "error",
-                "description": description,
-                "error": str(e)
-            }
+    success_count = sum(1 for r in results if r["success"])
     
     return jsonify({
         "timestamp": datetime.now().isoformat(),
-        "scenario": scenario,
-        "name": scenario_config["name"],
-        "description": scenario_config["description"],
+        "total_simulations": len(results),
+        "successful": success_count,
+        "failed": len(results) - success_count,
         "results": results
-    })
-
-@app.route('/api/simulate/<group>/<system>/<condition>', methods=['POST'])
-def simulate_specific(group, system, condition):
-    """Simule une condition sur un système spécifique"""
-    
-    if group not in APIS_CONFIG:
-        return jsonify({"error": "Groupe non trouvé"}), 404
-    
-    if system not in APIS_CONFIG[group]["systems"]:
-        return jsonify({"error": "Système non trouvé"}), 404
-    
-    try:
-        group_config = APIS_CONFIG[group]
-        system_config = group_config["systems"][system]
-        url = f"{group_config['url']}{system_config['endpoints']['simulate']}/{condition}"
-        
-        response = requests.post(url, timeout=TIMEOUT)
-        
-        return jsonify({
-            "timestamp": datetime.now().isoformat(),
-            "group": group,
-            "system": system,
-            "condition": condition,
-            "status": "success" if response.status_code == 200 else "error",
-            "response": response.json() if response.status_code == 200 else {"error": f"Status {response.status_code}"}
-        }), response.status_code
-    except Exception as e:
-        return jsonify({
-            "timestamp": datetime.now().isoformat(),
-            "group": group,
-            "system": system,
-            "condition": condition,
-            "status": "error",
-            "error": str(e)
-        }), 500
-
-@app.route('/api/groups', methods=['GET'])
-def list_groups():
-    """Liste tous les groupes"""
-    
-    groups = []
-    for group_key, group_config in APIS_CONFIG.items():
-        groups.append({
-            "id": group_key,
-            "name": group_config["name"],
-            "color": group_config["color"],
-            "url": group_config["url"],
-            "systems_count": len(group_config["systems"]),
-            "systems": list(group_config["systems"].keys())
-        })
-    
-    return jsonify({
-        "timestamp": datetime.now().isoformat(),
-        "total_groups": len(groups),
-        "groups": groups
-    })
-
-@app.route('/api/systems', methods=['GET'])
-def list_all_systems():
-    """Liste tous les systèmes"""
-    
-    systems = []
-    for group_key, group_config in APIS_CONFIG.items():
-        for system_key, system_config in group_config["systems"].items():
-            systems.append({
-                "id": system_key,
-                "name": system_config["name"],
-                "icon": system_config["icon"],
-                "group": group_key,
-                "group_name": group_config["name"],
-                "group_color": group_config["color"]
-            })
-    
-    return jsonify({
-        "timestamp": datetime.now().isoformat(),
-        "total_systems": len(systems),
-        "systems": systems
-    })
-
-@app.route('/api/report', methods=['GET'])
-def generate_full_report():
-    """Génère un rapport médical complet"""
-    
-    # Récupérer l'état de santé détaillé
-    health_response = check_health_detailed()
-    health_data = health_response.get_json()
-    
-    # Récupérer toutes les données
-    data_response = get_all_data()
-    data_json = data_response.get_json()
-    
-    # Analyse
-    online_systems = health_data["summary"]["online_systems"]
-    total_systems = health_data["summary"]["total_systems"]
-    health_percent = health_data["summary"]["health_percentage"]
-    
-    # Déterminer l'état global
-    if health_percent == 100:
-        overall_assessment = "Excellent - Tous les systèmes fonctionnent normalement"
-    elif health_percent >= 80:
-        overall_assessment = "Bon - La plupart des systèmes sont opérationnels"
-    elif health_percent >= 50:
-        overall_assessment = "Moyen - Plusieurs systèmes présentent des problèmes"
-    else:
-        overall_assessment = "Critique - Intervention urgente nécessaire"
-    
-    return jsonify({
-        "timestamp": datetime.now().isoformat(),
-        "report_type": "Bilan de Santé Complet",
-        "patient_id": "VIRTUAL_PATIENT_001",
-        "overall_assessment": overall_assessment,
-        "health_score": health_percent,
-        "systems_status": {
-            "total": total_systems,
-            "operational": online_systems,
-            "offline": total_systems - online_systems
-        },
-        "by_group": health_data["by_group"],
-        "recommendations": [
-            "Consulter les systèmes hors ligne",
-            "Vérifier les connexions API",
-            "Analyser les logs d'erreurs"
-        ] if online_systems < total_systems else ["Aucune action requise - Tout fonctionne normalement"]
     })
 
 # ===================== GESTION DES ERREURS =======================
@@ -734,31 +581,38 @@ def generate_full_report():
 def not_found(error):
     return jsonify({
         "error": "Endpoint non trouvé",
-        "message": "Consultez / pour la liste des endpoints disponibles"
+        "timestamp": datetime.now().isoformat(),
+        "status": 404
     }), 404
 
 @app.errorhandler(500)
 def internal_error(error):
     return jsonify({
         "error": "Erreur interne du serveur",
-        "message": str(error)
+        "message": str(error),
+        "timestamp": datetime.now().isoformat(),
+        "status": 500
     }), 500
 
 # ===================== LANCEMENT =======================
 
 if __name__ == '__main__':
     print("="*80)
-    print(" "*20 + "🏥 ORCHESTRATION GLOBALE - 12 SYSTÈMES D'ORGANES 🏥")
+    print(" "*15 + "🏥 ORCHESTRATION AVANCÉE - 12 SYSTÈMES CORPORELS 🏥")
     print("="*80)
-    print(f"\n✅ Port d'écoute: 5000")
-    print(f"✅ Total de systèmes gérés: 12")
-    print(f"✅ Groupes: {len(APIS_CONFIG)}")
-    print("\n📋 APIs requises:")
-    for group_key, group_config in APIS_CONFIG.items():
-        print(f"   {group_config['color']} {group_config['name']:20} → {group_config['url']:25} ({len(group_config['systems'])} systèmes)")
+    print(f"\n✅ Version: 2.0")
+    print(f"✅ Port d'écoute: 5000")
+    print(f"✅ Total de systèmes gérés: {sum(len(g['systems']) for g in GROUPS_CONFIG.values())}")
+    print(f"✅ Groupes configurés: {len(GROUPS_CONFIG)}")
+    print(f"✅ Systèmes critiques: {len(get_critical_systems())}")
+    print("\n📋 Groupes d'APIs requis:")
+    for group_name, group in GROUPS_CONFIG.items():
+        print(f"   {group['color']} {group['name']:25} → {group['url']:25} ({len(group['systems'])} systèmes)")
     print("\n" + "="*80)
-    print("🌐 Accès: http://localhost:5000")
-    print("📊 Health Check: http://localhost:5000/api/health")
+    print("🌐 Accès API: http://localhost:5000")
+    print("📊 Dashboard: http://localhost:5000/api/dashboard")
+    print("🚨 Alertes: http://localhost:5000/api/alerts")
+    print("📈 Métriques: http://localhost:5000/api/metrics")
     print("="*80 + "\n")
     
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5000, host='0.0.0.0')

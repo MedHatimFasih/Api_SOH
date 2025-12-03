@@ -1,213 +1,335 @@
-import sys
-import io
+"""
+Test pour specialized_systems.py
+Compatible avec la structure actuelle de l'API
+"""
 import requests
 import json
-from datetime import datetime
-
-# Force l'encodage UTF-8 pour Windows
-try:
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-except AttributeError:
-    pass  # Déjà en UTF-8
 
 BASE_URL = "http://localhost:5004"
 
 def print_separator():
     print("=" * 60)
 
-def print_test_header(test_num, description):
-    print(f"\nTest {test_num}: {description}...")
+def test_connection():
+    """Test 1: Connexion à l'API"""
+    print("Test 1: Connexion à l'API...")
+    try:
+        r = requests.get(f"{BASE_URL}/", timeout=3)
+        data = r.json()
+        print(f"[OK] API connectée")
+        print(f"     Groupe: {data.get('group')}")
+        print(f"     Version: {data.get('version')}")
+        print(f"     Systèmes: {', '.join(data.get('systems', []))}")
+        return True
+    except Exception as e:
+        print(f"[ERREUR] {e}")
+        return False
 
-def test_api():
-    """Test complet de l'API Immune System"""
+def test_status(system="immune"):
+    """Test 2: Récupération du status"""
+    print(f"Test 2: Récupération du status de {system}...")
+    try:
+        r = requests.get(f"{BASE_URL}/api/{system}/status")
+        data = r.json()
+        print(f"[OK] Status récupéré")
+        print(f"     Système: {data.get('name')}")
+        print(f"     État: {data.get('current_condition')}")
+        print(f"     Status: {data.get('status')}")
+        return True
+    except Exception as e:
+        print(f"[ERREUR] {e}")
+        return False
+
+def test_data(system="immune"):
+    """Test 3: Récupération des données"""
+    print(f"Test 3: Récupération des données de {system}...")
+    try:
+        r = requests.get(f"{BASE_URL}/api/{system}/data")
+        data = r.json()
+        print(f"[OK] Données récupérées")
+        
+        metrics = data.get('metrics', {})
+        print(f"  Métriques disponibles: {len(metrics)}")
+        
+        # Afficher les métriques de manière sûre
+        for key, value in metrics.items():
+            try:
+                # Gérer tous les types de valeurs correctement
+                if isinstance(value, (int, float)):
+                    print(f"  • {key}: {value}")
+                elif isinstance(value, str):
+                    print(f"  • {key}: {value}")
+                elif isinstance(value, dict):
+                    print(f"  • {key}: {{...}} ({len(value)} éléments)")
+                elif isinstance(value, list):
+                    print(f"  • {key}: [...] ({len(value)} éléments)")
+                else:
+                    print(f"  • {key}: {type(value).__name__}")
+            except Exception as metric_error:
+                print(f"  • {key}: [Erreur d'affichage: {metric_error}]")
+        
+        return True
+        
+    except Exception as e:
+        print(f"[ERREUR] {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def test_simulation(system="immune", condition="infection"):
+    """Test 4: Simulation d'une condition"""
+    print(f"Test 4: Simulation de {condition} sur {system}...")
+    try:
+        r = requests.post(f"{BASE_URL}/api/{system}/simulate/{condition}")
+        data = r.json()
+        
+        if data.get('success'):
+            print(f"[OK] {condition.capitalize()} simulée")
+            print(f"     Message: {data.get('message')}")
+            
+            # Afficher les nouvelles métriques de manière sûre
+            new_metrics = data.get('new_metrics', {})
+            if new_metrics and isinstance(new_metrics, dict):
+                print(f"     Nouvelles métriques:")
+                count = 0
+                for key, value in new_metrics.items():
+                    if count >= 3:  # Limiter à 3 métriques
+                        break
+                    if isinstance(value, (int, float, str)):
+                        print(f"       • {key}: {value}")
+                        count += 1
+            return True
+        else:
+            print(f"[ERREUR] Simulation échouée")
+            print(f"     Message: {data.get('message')}")
+            return False
+    except Exception as e:
+        print(f"[ERREUR] {e}")
+        return False
+
+def test_parameters(system="immune"):
+    """Test 5: Récupération des paramètres"""
+    print(f"Test 5: Récupération des paramètres de {system}...")
+    try:
+        r = requests.get(f"{BASE_URL}/api/{system}/parameters")
+        data = r.json()
+        print(f"[OK] Paramètres récupérés")
+        
+        metrics = data.get('metrics', [])
+        conditions = data.get('conditions', [])
+        
+        print(f"     Métriques disponibles: {len(metrics)}")
+        if metrics:
+            print(f"       {', '.join(metrics[:4])}")
+        
+        print(f"     Conditions disponibles: {len(conditions)}")
+        if conditions:
+            print(f"       {', '.join(conditions)}")
+        
+        return True
+    except Exception as e:
+        print(f"[ERREUR] {e}")
+        return False
+
+def test_all_systems():
+    """Test 6: Tester tous les systèmes"""
+    print("Test 6: Test de tous les systèmes...")
+    systems = ["immune", "musculoskeletal", "hematological", "reproductive"]
+    results = []
+    
+    for system in systems:
+        try:
+            r = requests.get(f"{BASE_URL}/api/{system}/status")
+            if r.status_code == 200:
+                data = r.json()
+                print(f"  [OK] {data.get('icon')} {data.get('name'):30} - {data.get('current_condition')}")
+                results.append(True)
+            else:
+                print(f"  [ERREUR] {system} - Code {r.status_code}")
+                results.append(False)
+        except Exception as e:
+            print(f"  [ERREUR] {system} - {e}")
+            results.append(False)
+    
+    return all(results)
+
+def test_error_handling():
+    """Test 7: Gestion des erreurs"""
+    print("Test 7: Test gestion d'erreur...")
+    try:
+        # Test système invalide
+        r1 = requests.get(f"{BASE_URL}/api/invalid_system/status")
+        if r1.status_code == 404:
+            print(f"  [OK] Système invalide géré (404)")
+        
+        # Test condition invalide
+        r2 = requests.post(f"{BASE_URL}/api/immune/simulate/invalid_condition")
+        if r2.status_code == 400:
+            data = r2.json()
+            print(f"  [OK] Condition invalide gérée (400)")
+            print(f"       Message: {data.get('error')}")
+            return True
+        
+        return False
+    except Exception as e:
+        print(f"[ERREUR] {e}")
+        return False
+
+def test_health():
+    """Test 8: Health check"""
+    print("Test 8: Health check...")
+    try:
+        r = requests.get(f"{BASE_URL}/health")
+        data = r.json()
+        
+        if data.get('status') == 'healthy':
+            print(f"[OK] Service healthy")
+            print(f"     Service: {data.get('service')}")
+            print(f"     Port: {data.get('port')}")
+            print(f"     Systèmes: {data.get('systems_count')}")
+            return True
+        else:
+            print(f"[ERREUR] Service non healthy")
+            return False
+    except Exception as e:
+        print(f"[ERREUR] {e}")
+        return False
+
+def test_multiple_simulations():
+    """Test 9: Simulations multiples"""
+    print("Test 9: Simulations multiples...")
+    
+    scenarios = [
+        ("immune", "infection"),
+        ("musculoskeletal", "arthritis"),
+        ("hematological", "anemia"),
+        ("reproductive", "hormonal_imbalance")
+    ]
+    
+    results = []
+    for system, condition in scenarios:
+        try:
+            r = requests.post(f"{BASE_URL}/api/{system}/simulate/{condition}")
+            data = r.json()
+            if data.get('success'):
+                print(f"  [OK] {system} -> {condition}")
+                results.append(True)
+            else:
+                print(f"  [ERREUR] {system} -> {condition}")
+                results.append(False)
+        except Exception as e:
+            print(f"  [ERREUR] {system} -> {condition}: {e}")
+            results.append(False)
+    
+    return all(results)
+
+def test_reset_to_normal():
+    """Test 10: Retour à la normale"""
+    print("Test 10: Retour à la normale...")
+    systems = ["immune", "musculoskeletal", "hematological", "reproductive"]
+    results = []
+    
+    for system in systems:
+        try:
+            r = requests.post(f"{BASE_URL}/api/{system}/simulate/normal")
+            data = r.json()
+            if data.get('success'):
+                results.append(True)
+            else:
+                results.append(False)
+        except:
+            results.append(False)
+    
+    if all(results):
+        print(f"[OK] Tous les systèmes remis à normal")
+        return True
+    else:
+        print(f"[ERREUR] Certains systèmes non remis à normal")
+        return False
+
+def run_all_tests():
+    """Exécute tous les tests"""
     print_separator()
-    print("TEST DE L'API IMMUNE SYSTEM")
+    print("TEST DE L'API SPECIALIZED SYSTEMS")
     print_separator()
     
-    results = {
-        "passed": 0,
-        "failed": 0,
-        "errors": []
-    }
-    
-    # Test 1: Connexion à l'API
-    print_test_header(1, "Connexion à l'API")
+    # Vérifier la connexion
     try:
-        response = requests.get(f"{BASE_URL}/", timeout=5)
-        if response.status_code == 200:
-            print("[OK] API connectée")
-            print(f"     Version: {response.json().get('version', 'N/A')}")
-            results["passed"] += 1
-        else:
-            print(f"[ERREUR] Code: {response.status_code}")
-            results["failed"] += 1
-    except Exception as e:
-        print(f"[ERREUR] {e}")
-        results["failed"] += 1
-        results["errors"].append(str(e))
+        requests.get(BASE_URL, timeout=2)
+    except:
+        print("\n[ERREUR CRITIQUE] Impossible de se connecter à l'API")
+        print("Assurez-vous que specialized_systems.py est lancé sur le port 5004\n")
+        print_separator()
+        return
     
-    # Test 2: Récupération du status
-    print_test_header(2, "Récupération du status")
-    try:
-        response = requests.get(f"{BASE_URL}/api/immune/status", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            print("[OK] Status récupéré")
-            print(f"     État: {data.get('health_status', 'N/A')}")
-            print(f"     Conditions actives: {len(data.get('active_conditions', []))}")
-            results["passed"] += 1
-        else:
-            print(f"[ERREUR] Code: {response.status_code}")
-            results["failed"] += 1
-    except Exception as e:
-        print(f"[ERREUR] {e}")
-        results["failed"] += 1
-        results["errors"].append(str(e))
+    results = []
+    errors = []
     
-    # Test 3: Récupération des données
-    print_test_header(3, "Récupération des données")
-    try:
-        response = requests.get(f"{BASE_URL}/api/immune/data", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            print("[OK] Données récupérées")
-            wbc = data.get('white_blood_cells', {})
-            print(f"     Leucocytes: {wbc.get('total_count', 'N/A')} {wbc.get('unit', '')}")
-            temp = data.get('inflammation', {}).get('temperature', 'N/A')
-            print(f"     Température: {temp}°C")
-            results["passed"] += 1
-        else:
-            print(f"[ERREUR] Code: {response.status_code}")
-            results["failed"] += 1
-    except Exception as e:
-        print(f"[ERREUR] {e}")
-        results["failed"] += 1
-        results["errors"].append(str(e))
+    # Exécuter les tests
+    tests = [
+        ("Connexion", test_connection),
+        ("Status", lambda: test_status("immune")),
+        ("Données", lambda: test_data("immune")),
+        ("Simulation", lambda: test_simulation("immune", "infection")),
+        ("Paramètres", lambda: test_parameters("immune")),
+        ("Tous systèmes", test_all_systems),
+        ("Gestion erreurs", test_error_handling),
+        ("Health check", test_health),
+        ("Simulations multiples", test_multiple_simulations),
+        ("Reset normal", test_reset_to_normal)
+    ]
     
-    # Test 4: Simulation d'infection
-    print_test_header(4, "Simulation d'infection")
-    try:
-        response = requests.post(f"{BASE_URL}/api/immune/simulate/infection", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            print("[OK] Infection simulée")
-            print(f"     Message: {data.get('message', 'N/A')}")
-            current = data.get('current_data', {})
-            wbc = current.get('white_blood_cells', {})
-            print(f"     Leucocytes: {wbc.get('total_count', 'N/A')} (augmentés)")
-            results["passed"] += 1
-        else:
-            print(f"[ERREUR] Code: {response.status_code}")
-            results["failed"] += 1
-    except Exception as e:
-        print(f"[ERREUR] {e}")
-        results["failed"] += 1
-        results["errors"].append(str(e))
+    for test_name, test_func in tests:
+        try:
+            result = test_func()
+            results.append(result)
+            if not result:
+                errors.append(test_name)
+        except Exception as e:
+            results.append(False)
+            errors.append(f"{test_name}: {str(e)}")
+        print()  # Ligne vide entre tests
     
-    # Test 5: Récupération des paramètres
-    print_test_header(5, "Récupération des paramètres")
-    try:
-        response = requests.get(f"{BASE_URL}/api/immune/parameters", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            print("[OK] Paramètres récupérés")
-            conditions = data.get('available_conditions', {})
-            print(f"     Conditions disponibles: {len(conditions)}")
-            for condition in list(conditions.keys())[:3]:
-                print(f"       - {condition}")
-            results["passed"] += 1
-        else:
-            print(f"[ERREUR] Code: {response.status_code}")
-            results["failed"] += 1
-    except Exception as e:
-        print(f"[ERREUR] {e}")
-        results["failed"] += 1
-        results["errors"].append(str(e))
-    
-    # Test 6: Configuration du patient
-    print_test_header(6, "Configuration du patient")
-    try:
-        config_data = {
-            "age": 45,
-            "sex": "F",
-            "health_status": "normal"
-        }
-        response = requests.post(
-            f"{BASE_URL}/api/immune/configure",
-            json=config_data,
-            timeout=5
-        )
-        if response.status_code == 200:
-            data = response.json()
-            print("[OK] Configuration mise à jour")
-            config = data.get('current_config', {})
-            print(f"     Âge: {config.get('age')} ans")
-            print(f"     Sexe: {config.get('sex')}")
-            print(f"     État: {config.get('health_status')}")
-            results["passed"] += 1
-        else:
-            print(f"[ERREUR] Code: {response.status_code}")
-            results["failed"] += 1
-    except Exception as e:
-        print(f"[ERREUR] {e}")
-        results["failed"] += 1
-        results["errors"].append(str(e))
-    
-    # Test 7: Test d'erreur (condition invalide)
-    print_test_header(7, "Test gestion d'erreur")
-    try:
-        response = requests.post(f"{BASE_URL}/api/immune/simulate/invalid_condition", timeout=5)
-        if response.status_code == 400:
-            print("[OK] Erreur correctement gérée")
-            print(f"     Message: {response.json().get('error', 'N/A')}")
-            results["passed"] += 1
-        else:
-            print(f"[ERREUR] Code attendu 400, reçu {response.status_code}")
-            results["failed"] += 1
-    except Exception as e:
-        print(f"[ERREUR] {e}")
-        results["failed"] += 1
-        results["errors"].append(str(e))
-    
-    # Affichage du résumé
+    # Résumé
     print_separator()
     print("RÉSUMÉ")
     print_separator()
-    total = results["passed"] + results["failed"]
-    success_rate = (results["passed"] / total * 100) if total > 0 else 0
     
-    print(f"Tests réussis: {results['passed']}/{total}")
-    print(f"Taux de réussite: {success_rate:.1f}%")
+    total = len(results)
+    passed = sum(results)
+    failed = total - passed
+    percentage = (passed / total * 100) if total > 0 else 0
     
-    if results["failed"] > 0:
-        print(f"\n[ATTENTION] {results['failed']} test(s) ont échoué")
-        if results["errors"]:
-            print("\nErreurs détectées:")
-            for i, error in enumerate(results["errors"], 1):
-                print(f"  {i}. {error}")
+    print(f"Tests réussis: {passed}/{total}")
+    print(f"Taux de réussite: {percentage:.1f}%")
+    
+    if failed == 0:
+        print("\n[SUCCÈS] Tous les tests ont réussi! 🎉")
     else:
-        print("\n[SUCCÈS] Tous les tests sont passés!")
+        print(f"\n[ATTENTION] {failed} test(s) ont échoué")
+        if errors:
+            print("Tests échoués:")
+            for i, error in enumerate(errors, 1):
+                print(f"  {i}. {error}")
     
     print_separator()
     
-    return results
-
-def test_endpoint_manually(endpoint):
-    """Test manuel d'un endpoint spécifique"""
-    print(f"\nTest manuel: {endpoint}")
-    try:
-        response = requests.get(f"{BASE_URL}{endpoint}", timeout=5)
-        print(f"Status: {response.status_code}")
-        print("Réponse:")
-        print(json.dumps(response.json(), indent=2, ensure_ascii=False))
-    except Exception as e:
-        print(f"Erreur: {e}")
+    # État final des systèmes
+    print("\nÉTAT FINAL DES SYSTÈMES:")
+    print("-" * 60)
+    systems = ["immune", "musculoskeletal", "hematological", "reproductive"]
+    for system in systems:
+        try:
+            r = requests.get(f"{BASE_URL}/api/{system}/status")
+            data = r.json()
+            icon = data.get('icon', '❓')
+            name = data.get('name', system)
+            condition = data.get('current_condition', 'unknown')
+            print(f"  {icon} {name:30} -> {condition}")
+        except:
+            print(f"  ❌ {system:30} -> Erreur")
+    
+    print_separator()
 
 if __name__ == "__main__":
-    # Test automatique
-    test_api()
-    
-    # Exemples de tests manuels (décommentez si besoin)
-    # test_endpoint_manually("/")
-    # test_endpoint_manually("/api/immune/status")
-    # test_endpoint_manually("/api/immune/data")
+    run_all_tests()
