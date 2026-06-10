@@ -41,7 +41,8 @@ GROUPS_CONFIG = {
             "renal": {"name": "Reins", "icon": "🫘", "critical": False},
             "digestive": {"name": "Système Digestif", "icon": "🫃", "critical": False},
             "dermal": {"name": "Peau", "icon": "🤚", "critical": False},
-            "endocrine": {"name": "Système Endocrinien", "icon": "⚗️", "critical": False}
+            "endocrine": {"name": "Système Endocrinien", "icon": "⚗️", "critical": False},
+            "lymphatic": {"name": "Système Lymphatique", "icon": "💚", "critical": False}
         }
     },
     "specialized": {
