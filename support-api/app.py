@@ -83,11 +83,31 @@ class EndocrineSystem:
         return {"error": "Condition inconnue"}
 
 
+class LymphaticSystem:
+    def __init__(self):
+        self.parameters = {"lymph_flow": (1, 3), "lymphocyte_count": (1500, 4000)}
+
+    def get_status(self):
+        return {"organ": "Système Lymphatique", "status": "Fonctionne normalement"}
+
+    def generate_data(self):
+        return {"lymph_flow": round(random.uniform(1, 3), 2),
+                "lymphocyte_count": random.randint(1500, 4000)}
+
+    def simulate(self, condition):
+        if condition == "oedeme":
+            return {"simulation": "Oedème lymphatique", "lymph_flow": 0.5}
+        if condition == "infection":
+            return {"simulation": "Infection lymphatique", "lymphocyte_count": 8000}
+        return {"error": "Condition inconnue"}
+
+
 # --- Instances ---
 renal = RenalSystem()
 digestive = DigestiveSystem()
 dermal = DermalSystem()
 endocrine = EndocrineSystem()
+lymphatic = LymphaticSystem()
 
 
 # --- Génération dynamique des routes ---
@@ -115,6 +135,7 @@ build_routes("renal", renal)
 build_routes("digestive", digestive)
 build_routes("dermal", dermal)
 build_routes("endocrine", endocrine)
+build_routes("lymphatic", lymphatic)
 
 
 # --- Lancer le serveur ---
